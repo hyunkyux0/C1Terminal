@@ -42,11 +42,11 @@
       "unitCategory": 0,
       "refundPercentage": 0.75,
       "turnsRequiredToRemove": 1,
-      "generatesResource1": 1,
+      "generatesResource1": 0,
       "upgrade": {
         "shieldRange":12.0,
         "shieldPerUnit":4.0,
-        "generatesResource2": 2
+        "generatesResource2": 0
       }
     },
     {

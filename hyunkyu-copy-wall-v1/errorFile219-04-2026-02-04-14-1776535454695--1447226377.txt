@@ -1,0 +1,11 @@
+Random seed: 1023346264720645242
+---------------- Starting Your Algo --------------------
+Traceback (most recent call last):
+  File "/Users/kyu/C1Terminal/hyunkyu-copy-wall-v1/algo_strategy.py", line 426, in <module>
+    algo.start()
+    ~~~~~~~~~~^^
+  File "/Users/kyu/C1Terminal/hyunkyu-copy-wall-v1/gamelib/algocore.py", line 59, in start
+    game_state_string = get_command()
+  File "/Users/kyu/C1Terminal/hyunkyu-copy-wall-v1/gamelib/util.py", line 12, in get_command
+    ret = sys.stdin.readline()
+KeyboardInterrupt

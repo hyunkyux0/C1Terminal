@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C1 Terminal Match Runner</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a2332; color: #c8d6e5; font-family: 'Rajdhani', sans-serif; overflow: hidden; }
+
+.app { display: flex; height: 100vh; }
+
+/* ── Left Sidebar ─────────────────────────────────────────── */
+.sidebar {
+  width: 430px; min-width: 430px;
+  background: #1a2332;
+  display: flex; flex-direction: column;
+  border-right: 1px solid #2a3a4a;
+  z-index: 2;
+}
+
+/* Tab bar */
+.tab-bar {
+  display: flex; border-bottom: 1px solid #2a3a4a;
+}
+.tab-btn {
+  flex: 1; padding: 10px; text-align: center;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px; letter-spacing: 1px; text-transform: uppercase;
+  color: #667788; background: none; border: none; cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab-btn:hover { color: #aabbcc; }
+.tab-btn.active { color: #4ae8c2; border-bottom-color: #4ae8c2; }
+
+.tab-content { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+.tab-content.active { display: flex; }
+
+/* ── MATCH TAB ────────────────────────────────────────────── */
+.match-setup {
+  padding: 16px 24px; border-bottom: 1px solid #2a3a4a;
+}
+.match-setup h3 {
+  font-size: 11px; color: #667788; letter-spacing: 2px;
+  text-transform: uppercase; margin-bottom: 10px;
+}
+.algo-select-row {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.algo-select-row label {
+  font-size: 12px; color: #8899aa; letter-spacing: 1px;
+  text-transform: uppercase; min-width: 24px;
+}
+.algo-select-row select {
+  flex: 1; background: #243040; color: #c8d6e5;
+  border: 1px solid #3a4a5a; border-radius: 3px;
+  padding: 6px 10px; font-family: 'Share Tech Mono', monospace; font-size: 12px;
+}
+.run-btn {
+  width: 100%; padding: 10px; margin-top: 4px;
+  background: #2a6050; color: #4ae8c2; border: 1px solid #3a7a6a;
+  border-radius: 4px; font-family: 'Rajdhani', sans-serif;
+  font-size: 14px; font-weight: 600; letter-spacing: 1px;
+  text-transform: uppercase; cursor: pointer;
+  transition: background 0.15s;
+}
+.run-btn:hover { background: #357060; }
+.run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.match-status {
+  margin-top: 8px; font-size: 12px; color: #667788;
+  font-family: 'Share Tech Mono', monospace;
+  min-height: 18px;
+}
+.match-status.running { color: #e8c84a; }
+.match-status.done { color: #4ae8c2; }
+.match-status.error { color: #e8534a; }
+
+/* Match history */
+.match-history { flex: 1; overflow-y: auto; }
+.match-history-header {
+  padding: 10px 24px; font-size: 11px; color: #667788;
+  letter-spacing: 2px; text-transform: uppercase;
+  border-bottom: 1px solid #2a3a4a;
+}
+.match-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 24px; border-bottom: 1px solid #222d3a;
+  cursor: pointer; transition: background 0.1s;
+  font-size: 12px;
+}
+.match-item:hover { background: #243040; }
+.match-item.active { background: #2a3a50; }
+.match-algo { color: #c8d6e5; font-weight: 600; }
+.match-vs { color: #556677; margin: 0 2px; }
+.match-result { margin-left: auto; font-family: 'Share Tech Mono', monospace; font-size: 11px; }
+.match-result.p1-win { color: #4ae8c2; }
+.match-result.p2-win { color: #e8734a; }
+.match-result.draw { color: #888; }
+
+/* ── REPLAY TAB (viewer) ─────────────────────────────────── */
+.round-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 20px; border-bottom: 1px solid #2a3a4a;
+  font-family: 'Share Tech Mono', monospace; font-size: 13px; letter-spacing: 1px;
+}
+.round-bar span { color: #8899aa; }
+.round-bar strong { color: #e0e8f0; }
+
+.player-card { padding: 20px 24px 16px; }
+.player-card.p2-card, .player-card.p1-card { border-bottom: 1px solid #2a3a4a; }
+
+.player-label {
+  font-size: 11px; font-weight: 600; letter-spacing: 2px;
+  text-transform: uppercase; margin-bottom: 2px;
+}
+.p2-card .player-label { color: #e8734a; }
+.p1-card .player-label { color: #4ae8c2; }
+
+.player-name {
+  font-size: 20px; font-weight: 700; color: #e0e8f0;
+  text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;
+}
+.health-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.health-label {
+  font-size: 11px; color: #667788; letter-spacing: 1px;
+  text-transform: uppercase; min-width: 48px;
+}
+.health-bar-track {
+  flex: 1; height: 14px; background: #2a3a4a; border-radius: 2px; overflow: hidden;
+}
+.health-bar-fill { height: 100%; border-radius: 2px; transition: width 0.15s; }
+.p2-card .health-bar-fill { background: #e8734a; }
+.p1-card .health-bar-fill { background: #4ae8c2; }
+.health-value {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 16px; font-weight: 700; color: #e0e8f0;
+  min-width: 36px; text-align: right;
+}
+.resource-row { display: flex; gap: 24px; margin-top: 6px; margin-bottom: 6px; }
+.resource-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: #8899aa; letter-spacing: 0.5px; text-transform: uppercase;
+}
+.resource-icon {
+  width: 16px; height: 16px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: bold; color: #1a2332;
+}
+.p2-card .resource-icon { background: #e8734a; }
+.p1-card .resource-icon { background: #4ae8c2; }
+.resource-value { font-weight: 600; color: #c8d6e5; }
+
+.events-section { flex: 1; overflow: hidden; display: flex; flex-direction: column; border-bottom: 1px solid #2a3a4a; }
+.events-header {
+  padding: 10px 24px; font-size: 11px; color: #667788;
+  letter-spacing: 2px; text-transform: uppercase; border-bottom: 1px solid #2a3a4a;
+}
+.events-log {
+  flex: 1; overflow-y: auto; padding: 8px 24px; font-size: 12px;
+  line-height: 1.7; font-family: 'Share Tech Mono', monospace;
+}
+.event { padding: 1px 0; }
+.event-spawn { color: #4ae8c2; }
+.event-move { color: #556677; }
+.event-attack { color: #e8734a; }
+.event-death { color: #ff4455; }
+.event-breach { color: #ffcc00; }
+.event-shield { color: #4ac8e8; }
+
+/* Controls */
+.controls-section { padding: 12px 24px 16px; }
+.frame-label {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
+}
+.frame-label span {
+  font-family: 'Share Tech Mono', monospace; font-size: 12px; color: #8899aa;
+}
+.frame-label strong { color: #e0e8f0; }
+.scrubber-track {
+  width: 100%; height: 8px; background: #2a3a4a; border-radius: 4px;
+  margin-bottom: 12px; position: relative; cursor: pointer;
+}
+.scrubber-fill { height: 100%; background: #7a6aaa; border-radius: 4px; transition: width 0.05s; }
+.scrubber-markers { position: absolute; top: 0; left: 0; right: 0; height: 100%; pointer-events: none; }
+.scrubber-marker {
+  position: absolute; top: -2px; width: 2px; height: 12px;
+  background: #4a5a6a; border-radius: 1px;
+}
+.playback-row { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.play-btn {
+  background: none; border: none; color: #667788; cursor: pointer;
+  font-size: 14px; padding: 6px 8px; border-radius: 4px;
+  font-family: 'Share Tech Mono', monospace; transition: color 0.1s;
+}
+.play-btn:hover { color: #c8d6e5; }
+.play-btn.main-play {
+  background: #4a5a6a; color: #e0e8f0; width: 36px; height: 36px;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; margin: 0 6px;
+}
+.play-btn.main-play:hover { background: #5a6a7a; }
+.speed-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px; color: #667788; margin-left: auto;
+  cursor: pointer; user-select: none;
+}
+.speed-label:hover { color: #c8d6e5; }
+
+/* ── ALGOS TAB ────────────────────────────────────────────── */
+.upload-section { padding: 16px 24px; border-bottom: 1px solid #2a3a4a; }
+.upload-section h3 {
+  font-size: 11px; color: #667788; letter-spacing: 2px;
+  text-transform: uppercase; margin-bottom: 10px;
+}
+.upload-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.upload-row input[type=text] {
+  flex: 1; background: #243040; color: #c8d6e5;
+  border: 1px solid #3a4a5a; border-radius: 3px;
+  padding: 6px 10px; font-family: 'Share Tech Mono', monospace; font-size: 12px;
+}
+.upload-row input[type=text]::placeholder { color: #556677; }
+.file-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.file-label {
+  display: inline-block; padding: 6px 14px;
+  background: #243040; color: #8899aa; border: 1px solid #3a4a5a;
+  border-radius: 3px; font-size: 12px; cursor: pointer;
+  transition: background 0.15s;
+}
+.file-label:hover { background: #2a3a50; }
+.file-name {
+  font-size: 12px; color: #4ae8c2; font-family: 'Share Tech Mono', monospace;
+  max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.clear-file-btn {
+  background: none; border: 1px solid #4a3030; color: #aa6666;
+  border-radius: 3px; padding: 2px 8px; font-size: 11px; cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+}
+.clear-file-btn:hover { background: #3a2020; color: #e8534a; }
+.upload-btn {
+  padding: 6px 18px; background: #2a6050; color: #4ae8c2;
+  border: 1px solid #3a7a6a; border-radius: 3px; cursor: pointer;
+  font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 600;
+  letter-spacing: 1px; text-transform: uppercase;
+}
+.upload-btn:hover { background: #357060; }
+.upload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.upload-status {
+  font-size: 11px; font-family: 'Share Tech Mono', monospace;
+  min-height: 16px; margin-top: 4px;
+}
+.upload-status.info { color: #667788; }
+.upload-status.uploading { color: #e8c84a; }
+.upload-status.success { color: #4ae8c2; }
+.upload-status.error { color: #e8534a; }
+
+.algo-list { flex: 1; overflow-y: auto; }
+.algo-list-header {
+  padding: 10px 24px; font-size: 11px; color: #667788;
+  letter-spacing: 2px; text-transform: uppercase; border-bottom: 1px solid #2a3a4a;
+}
+.algo-item {
+  display: flex; align-items: center; padding: 10px 24px;
+  border-bottom: 1px solid #222d3a; font-size: 13px;
+}
+.algo-item .algo-name { flex: 1; color: #c8d6e5; font-weight: 600; }
+.algo-item .algo-size { color: #556677; font-size: 11px; font-family: 'Share Tech Mono', monospace; margin-right: 12px; }
+.algo-item .delete-btn {
+  background: none; border: 1px solid #5a3030; color: #e8534a;
+  border-radius: 3px; padding: 2px 8px; font-size: 11px; cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+}
+.algo-item .delete-btn:hover { background: #3a2020; }
+
+/* ── Arena Panel ──────────────────────────────────────────── */
+.arena-panel {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  background: #222d3a; position: relative;
+}
+canvas { cursor: crosshair; }
+.coord-display {
+  position: absolute; bottom: 20px; right: 24px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 24px; color: #3a4a5a; letter-spacing: 2px;
+}
+
+/* No replay placeholder */
+.no-replay {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #3a4a5a; font-size: 16px; gap: 8px;
+}
+.no-replay .hint { font-size: 12px; color: #2a3a4a; font-family: 'Share Tech Mono', monospace; }
+
+/* Tooltip */
+.tooltip {
+  display: none; position: fixed; background: #1a2332; border: 1px solid #3a4a5a;
+  border-radius: 4px; padding: 8px 12px; font-size: 12px; z-index: 100;
+  pointer-events: none; max-width: 260px; line-height: 1.6;
+  font-family: 'Share Tech Mono', monospace;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.tooltip.visible { display: block; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <!-- Tabs -->
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="match">Match</button>
+      <button class="tab-btn" data-tab="replay">Replay</button>
+      <button class="tab-btn" data-tab="algos">Algos</button>
+    </div>
+
+    <!-- ── MATCH TAB ──────────────────────────────────────── -->
+    <div class="tab-content active" id="tab-match">
+      <div class="match-setup">
+        <h3>Run Match</h3>
+        <div class="algo-select-row">
+          <label>P1</label>
+          <select id="matchAlgo1"></select>
+        </div>
+        <div class="algo-select-row">
+          <label>P2</label>
+          <select id="matchAlgo2"></select>
+        </div>
+        <button class="run-btn" id="runMatchBtn">Run Match</button>
+        <div class="match-status" id="matchStatus"></div>
+      </div>
+      <div class="match-history-header">Match History</div>
+      <div class="match-history" id="matchHistory"></div>
+    </div>
+
+    <!-- ── REPLAY TAB ─────────────────────────────────────── -->
+    <div class="tab-content" id="tab-replay">
+      <div class="round-bar">
+        <span>ROUND/<strong id="roundNum">00</strong></span>
+        <span>PHASE/<strong id="phaseLabel">DEPLOY</strong></span>
+      </div>
+      <div class="player-card p2-card">
+        <div class="player-label" id="p2Label">PLAYER 2</div>
+        <div class="player-name" id="p2Name">—</div>
+        <div class="health-row">
+          <span class="health-label">Health</span>
+          <div class="health-bar-track"><div class="health-bar-fill" id="p2HealthBar"></div></div>
+          <span class="health-value" id="p2HealthVal">0</span>
+        </div>
+        <div class="resource-row">
+          <div class="resource-item"><div class="resource-icon">S</div><span>SP</span><span class="resource-value" id="p2SP">0</span></div>
+          <div class="resource-item"><div class="resource-icon">M</div><span>MP</span><span class="resource-value" id="p2MP">0</span></div>
+        </div>
+      </div>
+      <div class="player-card p1-card">
+        <div class="player-label" id="p1Label">PLAYER 1</div>
+        <div class="player-name" id="p1Name">—</div>
+        <div class="health-row">
+          <span class="health-label">Health</span>
+          <div class="health-bar-track"><div class="health-bar-fill" id="p1HealthBar"></div></div>
+          <span class="health-value" id="p1HealthVal">0</span>
+        </div>
+        <div class="resource-row">
+          <div class="resource-item"><div class="resource-icon">S</div><span>SP</span><span class="resource-value" id="p1SP">0</span></div>
+          <div class="resource-item"><div class="resource-icon">M</div><span>MP</span><span class="resource-value" id="p1MP">0</span></div>
+        </div>
+      </div>
+      <div class="events-section">
+        <div class="events-header">Events</div>
+        <div class="events-log" id="eventsLog"></div>
+      </div>
+      <div class="controls-section">
+        <div class="frame-label">
+          <span>FRAME <strong id="frameNum">0</strong> OF <strong id="frameTot">0</strong> / ROUND <strong id="frameRound">0</strong></span>
+        </div>
+        <div class="scrubber-track" id="scrubberTrack">
+          <div class="scrubber-fill" id="scrubberFill"></div>
+          <div class="scrubber-markers" id="scrubberMarkers"></div>
+        </div>
+        <div class="playback-row">
+          <button class="play-btn" id="btnStart">|&lsaquo;</button>
+          <button class="play-btn" id="btnPrevTurn">&lsaquo;&lsaquo;</button>
+          <button class="play-btn main-play" id="btnPlay">&#9654;</button>
+          <button class="play-btn" id="btnNextTurn">&rsaquo;&rsaquo;</button>
+          <button class="play-btn" id="btnEnd">&rsaquo;|</button>
+          <span class="speed-label" id="speedLabel">1X</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ALGOS TAB ──────────────────────────────────────── -->
+    <div class="tab-content" id="tab-algos">
+      <div class="upload-section">
+        <h3>Upload Algorithm</h3>
+        <div class="upload-row">
+          <input type="text" id="algoName" placeholder="Algorithm name">
+        </div>
+        <div class="file-row">
+          <label class="file-label" for="algoFile">Choose .zip</label>
+          <input type="file" id="algoFile" accept=".zip" style="display:none">
+          <span class="file-name" id="fileName"></span>
+          <button class="clear-file-btn" id="clearFileBtn" style="display:none">x</button>
+          <button class="upload-btn" id="uploadBtn">Upload</button>
+        </div>
+        <div class="upload-status info" id="uploadStatus"></div>
+      </div>
+      <div class="algo-list-header">Uploaded Algorithms</div>
+      <div class="algo-list" id="algoList"></div>
+    </div>
+  </div>
+
+  <!-- Arena -->
+  <div class="arena-panel" id="arenaPanel">
+    <div class="no-replay" id="noReplay">
+      <span>No replay loaded</span>
+      <span class="hint">Run a match or select one from history</span>
+    </div>
+    <canvas id="arena" style="display:none"></canvas>
+    <div class="coord-display" id="coordDisplay"></div>
+  </div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ─── Constants ───────────────────────────────────────────────
+const UNIT_CATS = ['wall','support','turret','scout','demolisher','interceptor','remove','upgrade'];
+const P1_MAIN = '#4ae8c2', P1_DIM = '#2a8870';
+const P2_MAIN = '#e8734a', P2_DIM = '#a04830';
+const SPEEDS = [0.5, 1, 2, 4, 8, 16];
+
+// ─── State ───────────────────────────────────────────────────
+let config = null, frames = [], currentFrame = 0;
+let playing = false, playInterval = null, speedIdx = 1;
+let startingHP = 40;
+let currentMatchMeta = null;
+let algos = [];
+
+// ─── Tabs ────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === name);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ─── Canvas ──────────────────────────────────────────────────
+const canvas = document.getElementById('arena');
+const ctx = canvas.getContext('2d');
+let CELL, PAD;
+
+function isInBounds(x, y) {
+  return (Math.abs(x - 13.5) + Math.abs(y - 13.5)) < 14.5;
+}
+
+function resizeCanvas() {
+  const panel = document.getElementById('arenaPanel');
+  const maxW = panel.clientWidth - 40;
+  const maxH = panel.clientHeight - 40;
+  CELL = Math.floor(Math.min(maxW, maxH) / 30);
+  CELL = Math.max(CELL, 16);
+  PAD = Math.floor(CELL * 1.2);
+  canvas.width = 28 * CELL + PAD * 2;
+  canvas.height = 28 * CELL + PAD * 2;
+}
+
+function cellCenter(x, y) { return [PAD + x * CELL + CELL / 2, PAD + (27 - y) * CELL + CELL / 2]; }
+function cellToPixel(x, y) { return [PAD + x * CELL, PAD + (27 - y) * CELL]; }
+function pixelToCell(px, py) { return [Math.floor((px - PAD) / CELL), 27 - Math.floor((py - PAD) / CELL)]; }
+
+function drawArena(frame) {
+  const w = canvas.width, h = canvas.height;
+  ctx.fillStyle = '#222d3a';
+  ctx.fillRect(0, 0, w, h);
+  for (let x = 0; x < 28; x++) {
+    for (let y = 0; y < 28; y++) {
+      if (!isInBounds(x, y)) continue;
+      const [px, py] = cellToPixel(x, y);
+      ctx.strokeStyle = '#2a3848';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(px + 0.5, py + 0.5, CELL - 1, CELL - 1);
+      ctx.fillStyle = '#3a4a58';
+      ctx.fillRect(px, py, 2, 2);
+    }
+  }
+  if (!frame) return;
+  for (const [units, player] of [[frame.p1Units, 1], [frame.p2Units, 2]]) {
+    for (let cat = 0; cat <= 2; cat++) {
+      if (!units[cat]) continue;
+      for (const unit of units[cat]) drawStructure(unit, cat, player, units[7]);
+    }
+  }
+  for (const [units, player] of [[frame.p1Units, 1], [frame.p2Units, 2]]) {
+    const stacks = {};
+    for (let cat = 3; cat <= 5; cat++) {
+      if (!units[cat]) continue;
+      for (const u of units[cat]) {
+        const k = `${u[0]},${u[1]},${cat}`;
+        if (!stacks[k]) stacks[k] = { x: u[0], y: u[1], cat, count: 0 };
+        stacks[k].count++;
+      }
+    }
+    for (const s of Object.values(stacks)) drawMobile(s, player);
+  }
+}
+
+function drawStructure(unit, cat, player, upgrades) {
+  const [x, y, hp, id] = unit;
+  const [cx, cy] = cellCenter(x, y);
+  const color = player === 1 ? P1_MAIN : P2_MAIN;
+  const upgraded = upgrades && upgrades.some(u => u[3] === id);
+  const r = CELL * 0.38;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = upgraded ? 2.5 : 1.5;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 1.2;
+  if (cat === 0) {
+    const ir = r * 0.55;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i - Math.PI / 6;
+      i === 0 ? ctx.moveTo(cx + Math.cos(a) * ir, cy + Math.sin(a) * ir) : ctx.lineTo(cx + Math.cos(a) * ir, cy + Math.sin(a) * ir);
+    }
+    ctx.closePath(); ctx.stroke();
+  } else if (cat === 2) {
+    const ir = r * 0.5;
+    ctx.beginPath(); ctx.moveTo(cx - ir, cy); ctx.lineTo(cx + ir, cy); ctx.moveTo(cx, cy - ir); ctx.lineTo(cx, cy + ir); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, ir * 0.45, 0, Math.PI * 2); ctx.stroke();
+  } else if (cat === 1) {
+    const ir = r * 0.5;
+    ctx.beginPath(); ctx.moveTo(cx, cy - ir); ctx.lineTo(cx + ir, cy); ctx.lineTo(cx, cy + ir); ctx.lineTo(cx - ir, cy); ctx.closePath(); ctx.stroke();
+  }
+  if (upgraded) { ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx, cy, r + 3, 0, Math.PI * 2); ctx.stroke(); }
+}
+
+function drawMobile(stack, player) {
+  const color = player === 1 ? P1_MAIN : P2_MAIN;
+  const [cx, cy] = cellCenter(stack.x, stack.y);
+  const r = CELL * 0.32;
+  ctx.fillStyle = color; ctx.globalAlpha = 0.85;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  if (stack.count > 1) {
+    const bx = cx + r * 0.7, by = cy - r * 0.7;
+    ctx.fillStyle = '#222d3a'; ctx.beginPath(); ctx.arc(bx, by, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(bx, by, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1a2332'; ctx.font = `bold ${Math.max(9, CELL * 0.28)}px Rajdhani,sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(stack.count, bx, by + 0.5);
+  }
+  ctx.fillStyle = '#1a2332'; ctx.font = `bold ${Math.max(8, CELL * 0.28)}px 'Share Tech Mono',monospace`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText({3:'+',4:'X',5:'*'}[stack.cat] || '?', cx, cy + 0.5);
+}
+
+// ─── Frame nav ───────────────────────────────────────────────
+function setFrame(idx) {
+  currentFrame = Math.max(0, Math.min(idx, frames.length - 1));
+  drawArena(frames[currentFrame]);
+  updateReplayUI(frames[currentFrame]);
+}
+
+function updateReplayUI(frame) {
+  const ti = frame.turnInfo;
+  const phase = ti[0] === 0 ? 'DEPLOY' : ti[0] === 1 ? 'ACTION' : 'END';
+  document.getElementById('roundNum').textContent = String(ti[1]).padStart(2, '0');
+  document.getElementById('phaseLabel').textContent = phase;
+  document.getElementById('frameNum').textContent = currentFrame + 1;
+  document.getElementById('frameTot').textContent = frames.length;
+  document.getElementById('frameRound').textContent = ti[1];
+  document.getElementById('scrubberFill').style.width = (frames.length > 1 ? (currentFrame / (frames.length - 1)) * 100 : 0) + '%';
+
+  const p1s = frame.p1Stats || [0,0,0,0], p2s = frame.p2Stats || [0,0,0,0];
+  document.getElementById('p1HealthVal').textContent = Math.floor(p1s[0]);
+  document.getElementById('p1HealthBar').style.width = (p1s[0] / startingHP * 100) + '%';
+  document.getElementById('p1SP').textContent = Math.floor(p1s[1]);
+  document.getElementById('p1MP').textContent = p1s[2].toFixed(1);
+  document.getElementById('p2HealthVal').textContent = Math.floor(p2s[0]);
+  document.getElementById('p2HealthBar').style.width = (p2s[0] / startingHP * 100) + '%';
+  document.getElementById('p2SP').textContent = Math.floor(p2s[1]);
+  document.getElementById('p2MP').textContent = p2s[2].toFixed(1);
+
+  const log = document.getElementById('eventsLog');
+  const events = frame.events || {};
+  let html = '';
+  if (events.spawn?.length) for (const e of events.spawn) html += `<div class="event event-spawn">+ ${UNIT_CATS[e[1]]} [${e[0]}] P${e[3]}</div>`;
+  if (events.attack?.length) for (const e of events.attack) html += `<div class="event event-attack">! attack [${e[1]}] dmg=${e[2]}</div>`;
+  if (events.death?.length) for (const e of events.death) html += `<div class="event event-death">x death [${e[0]}] P${e[4]}</div>`;
+  if (events.breach?.length) for (const e of events.breach) html += `<div class="event event-breach">! BREACH [${e[0]}] P${e[4]}</div>`;
+  if (events.shield?.length) html += `<div class="event event-shield">~ ${events.shield.length} shield(s)</div>`;
+  if (events.move?.length) html += `<div class="event event-move">. ${events.move.length} move(s)</div>`;
+  if (!html) html = '<div class="event" style="color:#3a4a5a">--</div>';
+  log.innerHTML = html;
+}
+
+function prevTurn() {
+  const cur = frames[currentFrame].turnInfo[1];
+  for (let i = currentFrame - 1; i >= 0; i--) if (frames[i].turnInfo[1] < cur) { setFrame(i); return; }
+  setFrame(0);
+}
+function nextTurn() {
+  const cur = frames[currentFrame].turnInfo[1];
+  for (let i = currentFrame + 1; i < frames.length; i++) if (frames[i].turnInfo[1] > cur) { setFrame(i); return; }
+  setFrame(frames.length - 1);
+}
+
+function togglePlay() {
+  playing = !playing;
+  document.getElementById('btnPlay').innerHTML = playing ? '&#9646;&#9646;' : '&#9654;';
+  if (playing) startPlayback(); else clearInterval(playInterval);
+}
+function startPlayback() {
+  clearInterval(playInterval);
+  playInterval = setInterval(() => {
+    if (currentFrame >= frames.length - 1) { togglePlay(); return; }
+    setFrame(currentFrame + 1);
+  }, 100 / SPEEDS[speedIdx]);
+}
+function cycleSpeed() {
+  speedIdx = (speedIdx + 1) % SPEEDS.length;
+  document.getElementById('speedLabel').textContent = SPEEDS[speedIdx] + 'X';
+  if (playing) startPlayback();
+}
+
+// Scrubber
+const scrubberTrack = document.getElementById('scrubberTrack');
+let scrubbing = false;
+function scrubTo(e) {
+  const rect = scrubberTrack.getBoundingClientRect();
+  setFrame(Math.round(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * (frames.length - 1)));
+}
+scrubberTrack.addEventListener('mousedown', e => { scrubbing = true; scrubTo(e); });
+window.addEventListener('mousemove', e => { if (scrubbing) scrubTo(e); });
+window.addEventListener('mouseup', () => scrubbing = false);
+
+// Canvas hover
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const [x, y] = pixelToCell(e.clientX - rect.left, e.clientY - rect.top);
+  const coord = document.getElementById('coordDisplay');
+  const tip = document.getElementById('tooltip');
+  if (x < 0 || x > 27 || y < 0 || y > 27 || !isInBounds(x, y)) { coord.textContent = ''; tip.classList.remove('visible'); return; }
+  coord.textContent = `{${x}, ${y}}`;
+  if (!frames[currentFrame]) return;
+  const frame = frames[currentFrame];
+  let info = `<b>[${x}, ${y}]</b>`, found = false;
+  for (const [units, player] of [[frame.p1Units, 1], [frame.p2Units, 2]]) {
+    for (let cat = 0; cat < Math.min(units.length, 6); cat++) {
+      if (!units[cat]) continue;
+      for (const u of units[cat]) {
+        if (u[0] === x && u[1] === y) {
+          const upgraded = units[7]?.some(up => up[3] === u[3]);
+          const pc = player === 1 ? P1_MAIN : P2_MAIN;
+          info += `<br><span style="color:${pc}">P${player}</span> ${UNIT_CATS[cat]}${upgraded ? ' &#9733;' : ''} HP:${u[2].toFixed(1)}`;
+          found = true;
+        }
+      }
+    }
+  }
+  if (found) { tip.innerHTML = info; tip.style.left = (e.clientX+14)+'px'; tip.style.top = (e.clientY+14)+'px'; tip.classList.add('visible'); }
+  else tip.classList.remove('visible');
+});
+canvas.addEventListener('mouseleave', () => { document.getElementById('coordDisplay').textContent=''; document.getElementById('tooltip').classList.remove('visible'); });
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  switch (e.key) {
+    case ' ': e.preventDefault(); togglePlay(); break;
+    case 'ArrowRight': e.shiftKey ? nextTurn() : setFrame(currentFrame + 1); break;
+    case 'ArrowLeft': e.shiftKey ? prevTurn() : setFrame(currentFrame - 1); break;
+    case 'ArrowUp': nextTurn(); break;
+    case 'ArrowDown': prevTurn(); break;
+    case 'Home': setFrame(0); break;
+    case 'End': setFrame(frames.length - 1); break;
+    case 's': cycleSpeed(); break;
+  }
+});
+
+window.addEventListener('resize', () => { if (frames.length) { resizeCanvas(); drawArena(frames[currentFrame]); } });
+
+// ─── API helpers ─────────────────────────────────────────────
+async function fetchAlgos() {
+  const res = await fetch('/api/algos');
+  algos = await res.json();
+  renderAlgoSelects();
+  renderAlgoList();
+}
+
+function renderAlgoSelects() {
+  const opts = algos.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+  const empty = '<option value="">-- select algo --</option>';
+  document.getElementById('matchAlgo1').innerHTML = empty + opts;
+  document.getElementById('matchAlgo2').innerHTML = empty + opts;
+}
+
+function renderAlgoList() {
+  const list = document.getElementById('algoList');
+  if (!algos.length) { list.innerHTML = '<div style="padding:16px 24px;color:#3a4a5a;font-size:12px">No algorithms uploaded</div>'; return; }
+  list.innerHTML = algos.map(a => `
+    <div class="algo-item">
+      <span class="algo-name">${a.name}</span>
+      <span class="algo-size">${(a.size / 1024).toFixed(0)} KB</span>
+      <button class="delete-btn" onclick="deleteAlgo('${a.id}')">delete</button>
+    </div>
+  `).join('');
+}
+
+async function fetchMatches() {
+  const res = await fetch('/api/matches');
+  const matches = await res.json();
+  renderMatchHistory(matches);
+}
+
+function renderMatchHistory(matches) {
+  const el = document.getElementById('matchHistory');
+  if (!matches.length) { el.innerHTML = '<div style="padding:16px 24px;color:#3a4a5a;font-size:12px">No matches yet</div>'; return; }
+  el.innerHTML = matches.map(m => {
+    const cls = m.winner === 1 ? 'p1-win' : m.winner === 2 ? 'p2-win' : 'draw';
+    const label = m.winner === 1 ? `P1 wins (${m.p1_hp}-${m.p2_hp})` : m.winner === 2 ? `P2 wins (${m.p2_hp}-${m.p1_hp})` : 'Draw';
+    return `<div class="match-item" onclick="loadMatch('${m.match_id}','${m.algo1_id}','${m.algo2_id}')">
+      <span class="match-algo">${m.algo1_id}</span><span class="match-vs">vs</span><span class="match-algo">${m.algo2_id}</span>
+      <span class="match-result ${cls}">${label}</span>
+    </div>`;
+  }).join('');
+}
+
+// ─── Actions ─────────────────────────────────────────────────
+async function loadMatch(matchId, algo1, algo2) {
+  const res = await fetch(`/api/replay/${matchId}`);
+  const data = await res.json();
+  if (data.error) { alert(data.error); return; }
+  config = data.config;
+  frames = data.frames;
+  if (config?.resources?.startingHP) startingHP = config.resources.startingHP;
+  currentMatchMeta = { algo1, algo2 };
+
+  document.getElementById('p1Label').textContent = 'PLAYER 1';
+  document.getElementById('p1Name').textContent = algo1 || 'P1';
+  document.getElementById('p2Label').textContent = 'PLAYER 2';
+  document.getElementById('p2Name').textContent = algo2 || 'P2';
+
+  // Show canvas, hide placeholder
+  canvas.style.display = '';
+  document.getElementById('noReplay').style.display = 'none';
+
+  // Scrubber markers
+  const markers = document.getElementById('scrubberMarkers');
+  markers.innerHTML = '';
+  const turns = new Set(); frames.forEach(f => turns.add(f.turnInfo[1]));
+  for (const t of turns) {
+    const idx = frames.findIndex(f => f.turnInfo[1] === t);
+    const m = document.createElement('div');
+    m.className = 'scrubber-marker';
+    m.style.left = (idx / (frames.length - 1) * 100) + '%';
+    markers.appendChild(m);
+  }
+
+  switchTab('replay');
+  resizeCanvas();
+  setFrame(0);
+}
+
+document.getElementById('runMatchBtn').addEventListener('click', async () => {
+  const a1 = document.getElementById('matchAlgo1').value;
+  const a2 = document.getElementById('matchAlgo2').value;
+  if (!a1 || !a2) { setMatchStatus('Select both algorithms', 'error'); return; }
+
+  const btn = document.getElementById('runMatchBtn');
+  btn.disabled = true;
+  setMatchStatus('Running match...', 'running');
+
+  try {
+    const res = await fetch('/api/matches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ algo1_id: a1, algo2_id: a2 }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Match failed');
+
+    const winner = data.winner === 1 ? `P1 wins (${data.p1_hp}-${data.p2_hp})` : data.winner === 2 ? `P2 wins (${data.p2_hp}-${data.p1_hp})` : 'Draw';
+    setMatchStatus(`Done: ${winner}`, 'done');
+    fetchMatches();
+    loadMatch(data.match_id, a1, a2);
+  } catch (e) {
+    setMatchStatus('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function setMatchStatus(msg, cls) {
+  const el = document.getElementById('matchStatus');
+  el.textContent = msg;
+  el.className = 'match-status ' + (cls || '');
+}
+
+// File selection
+function updateFileDisplay() {
+  const fileInput = document.getElementById('algoFile');
+  const nameEl = document.getElementById('fileName');
+  const clearBtn = document.getElementById('clearFileBtn');
+  if (fileInput.files.length) {
+    nameEl.textContent = fileInput.files[0].name;
+    clearBtn.style.display = '';
+  } else {
+    nameEl.textContent = '';
+    clearBtn.style.display = 'none';
+  }
+}
+
+document.getElementById('algoFile').addEventListener('change', updateFileDisplay);
+
+document.getElementById('clearFileBtn').addEventListener('click', () => {
+  document.getElementById('algoFile').value = '';
+  updateFileDisplay();
+});
+
+// Upload
+function setUploadStatus(msg, cls) {
+  const el = document.getElementById('uploadStatus');
+  el.textContent = msg;
+  el.className = 'upload-status ' + (cls || 'info');
+}
+
+document.getElementById('uploadBtn').addEventListener('click', async () => {
+  const fileInput = document.getElementById('algoFile');
+  const name = document.getElementById('algoName').value.trim();
+  if (!fileInput.files.length) { setUploadStatus('Select a .zip file first', 'error'); return; }
+
+  const btn = document.getElementById('uploadBtn');
+  btn.disabled = true;
+  setUploadStatus('Uploading...', 'uploading');
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  formData.append('name', name || '');
+
+  try {
+    const res = await fetch('/api/algos', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Upload failed');
+    setUploadStatus('Uploaded: ' + data.name, 'success');
+    document.getElementById('algoName').value = '';
+    fileInput.value = '';
+    updateFileDisplay();
+    fetchAlgos();
+  } catch (e) {
+    setUploadStatus('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Delete algo
+async function deleteAlgo(id) {
+  if (!confirm(`Delete algorithm "${id}"?`)) return;
+  try {
+    const res = await fetch(`/api/algos/${id}`, { method: 'DELETE' });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Delete failed'); }
+    fetchAlgos();
+  } catch (e) {
+    alert('Delete failed: ' + e.message);
+  }
+}
+
+// Playback controls
+document.getElementById('btnStart').onclick = () => setFrame(0);
+document.getElementById('btnEnd').onclick = () => setFrame(frames.length - 1);
+document.getElementById('btnPrevTurn').onclick = prevTurn;
+document.getElementById('btnNextTurn').onclick = nextTurn;
+document.getElementById('btnPlay').onclick = togglePlay;
+document.getElementById('speedLabel').onclick = cycleSpeed;
+
+// ─── Init ────────────────────────────────────────────────────
+fetchAlgos();
+fetchMatches();
+</script>
+</body>
+</html>
