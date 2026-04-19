@@ -93,6 +93,15 @@ class AlgoStrategy(gamelib.AlgoCore):
     EXTRA_SUPPORTS = [[13, 11], [14, 11]]     # supports 3-4 (added on signal)
     FRONT_TURRETS = [[13, 13], [14, 13]]      # upgraded early vs shielded scouts
 
+    # Support area reinforcement — surrounds the 2x2 support cluster
+    # y=12: .TT...........TT...........TT.   (existing core at 12,15 + front)
+    # y=11: ..........T.W.ss.W.T..........   (T-W-ss-W-T pattern)
+    # y=10: ............T..T.............   (rear turrets protect backlane supports)
+    SUPPORT_GUARD_TURRETS = [[11, 11], [16, 11]]  # flanks the support cluster
+    SUPPORT_GUARD_WALLS = [[12, 11], [15, 11]]    # walls directly adjacent to supports
+    SUPPORT_REAR_TURRETS = [[12, 10], [15, 10]]   # protect backlane supports from y<11 scouts
+    SUPPORT_AREA_TURRET_UPGRADES = [[12, 12], [15, 12]]  # existing y=12 turrets
+
     # V-arm positions in TOP-DOWN order — scouts enter near midline first,
     # so upper-V catches them earlier than deeper positions.
     V_ARM_POSITIONS = [
@@ -107,22 +116,29 @@ class AlgoStrategy(gamelib.AlgoCore):
     # already built. Prevents SP diversion before defense is stable.
     V_ARM_GATE_FOR_SUPPORTS = 6
 
-    # Corner "blocked" check regions — if enemy has any structure in these
-    # positions, our corner walls there are wasted and should be removed.
-    LEFT_CORNER_REGION = [[0, 14], [1, 14], [2, 14], [1, 15]]
-    RIGHT_CORNER_REGION = [[27, 14], [26, 14], [25, 14], [26, 15]]
+    # Per-wall "blocked" mapping — each wall at y=13 is made useless by the
+    # enemy structure at the y=14 position directly above it.
+    CORNER_WALL_BLOCKERS = {
+        (0, 13): [0, 14],
+        (1, 13): [1, 14],
+        (26, 13): [26, 14],
+        (27, 13): [27, 14],
+    }
+    LEFT_CORNER_WALLS = [[0, 13], [1, 13]]
+    RIGHT_CORNER_WALLS = [[26, 13], [27, 13]]
 
     def build_defense(self, game_state):
         # === URGENT CORNER WALLS (if enemy scored through corners) ===
+        # Rebuild each individual wall only if (a) enemy has breached that side
+        # AND (b) the enemy hasn't blocked the tile directly above that wall.
         left_breached = any(loc[0] <= 2 for loc in self.scored_on_locations)
         right_breached = any(loc[0] >= 25 for loc in self.scored_on_locations)
-        left_blocked = self._is_corner_blocked(game_state, self.LEFT_CORNER_REGION)
-        right_blocked = self._is_corner_blocked(game_state, self.RIGHT_CORNER_REGION)
-
-        if left_breached and not left_blocked:
-            game_state.attempt_spawn(WALL, [[0, 13], [1, 13]])
-        if right_breached and not right_blocked:
-            game_state.attempt_spawn(WALL, [[26, 13], [27, 13]])
+        for wall in self.LEFT_CORNER_WALLS if left_breached else []:
+            if not self._wall_blocked(game_state, wall):
+                game_state.attempt_spawn(WALL, [wall])
+        for wall in self.RIGHT_CORNER_WALLS if right_breached else []:
+            if not self._wall_blocked(game_state, wall):
+                game_state.attempt_spawn(WALL, [wall])
 
         # === CORE: y=13 turret pairs ===
         game_state.attempt_spawn(TURRET, [
@@ -144,8 +160,6 @@ class AlgoStrategy(gamelib.AlgoCore):
         game_state.attempt_spawn(TURRET, self.V_ARM_POSITIONS)
 
         # === ADAPTIVE: 3rd / 4th supports (gated on V-arm count) ===
-        # Only escalate once V-arm foundation is built; prevents early SP
-        # diversion that would leave V-arms incomplete.
         v_arms_built = sum(
             1 for pos in self.V_ARM_POSITIONS
             if game_state.contains_stationary_unit(pos)
@@ -159,24 +173,44 @@ class AlgoStrategy(gamelib.AlgoCore):
                 game_state.attempt_spawn(SUPPORT, [self.EXTRA_SUPPORTS[1]])
                 game_state.attempt_upgrade([self.EXTRA_SUPPORTS[1]])
 
-        # === FRONT-LINE TURRET UPGRADES (also gated on V-arm foundation) ===
-        if v_arms_built >= self.V_ARM_GATE_FOR_SUPPORTS:
+            # === SUPPORT AREA REINFORCEMENT (turrets around supports) ===
+            # Permanent turret flanks at [11,11],[16,11] kill scouts approaching
+            # from the front. Rear turrets at [12,10],[15,10] kill scouts that
+            # pass through y<11 and could attack backlane supports from range 3.5.
+            # Upgrade y=12 turrets too.
+            game_state.attempt_spawn(TURRET, self.SUPPORT_GUARD_TURRETS)
+            game_state.attempt_upgrade(self.SUPPORT_GUARD_TURRETS)
+            game_state.attempt_spawn(TURRET, self.SUPPORT_REAR_TURRETS)
+            game_state.attempt_upgrade(self.SUPPORT_REAR_TURRETS)
+            game_state.attempt_upgrade(self.SUPPORT_AREA_TURRET_UPGRADES)
+
+            # Front-line turret upgrades
             game_state.attempt_upgrade(self.FRONT_TURRETS)
 
-        # === CORNER WALLS (remove if blocked, else build) ===
-        if left_blocked:
-            game_state.attempt_remove([[0, 13], [1, 13]])
-        else:
-            game_state.attempt_spawn(WALL, [[0, 13], [1, 13]])
+            # === SUPPORT GUARD WALLS (only when enemy pressing with supports) ===
+            # Walls at [12,11],[15,11] tighten the defense ring. Enabled when
+            # enemy has 3+ supports (they're pushing shielded scouts).
+            enemy_supports = self.count_enemy_structures(game_state, SUPPORT)
+            if enemy_supports >= 3:
+                game_state.attempt_spawn(WALL, self.SUPPORT_GUARD_WALLS)
+                game_state.attempt_upgrade(self.SUPPORT_GUARD_WALLS)
 
-        if right_blocked:
-            game_state.attempt_remove([[26, 13], [27, 13]])
-        else:
-            game_state.attempt_spawn(WALL, [[26, 13], [27, 13]])
+        # === CORNER WALLS (per-wall: remove if that specific wall is blocked,
+        # else build). The wall at [x,13] is blocked iff enemy has a structure
+        # at [x,14] directly above it. ===
+        for wall in self.LEFT_CORNER_WALLS + self.RIGHT_CORNER_WALLS:
+            if self._wall_blocked(game_state, wall):
+                game_state.attempt_remove([wall])
+            else:
+                game_state.attempt_spawn(WALL, [wall])
 
-    def _is_corner_blocked(self, game_state, region):
-        """Check if enemy has any structure in the corner approach region."""
-        return any(game_state.contains_stationary_unit(loc) for loc in region)
+    def _wall_blocked(self, game_state, wall):
+        """A corner wall is blocked iff the enemy has a structure at the tile
+        directly above it (same x, y+1)."""
+        blocker = self.CORNER_WALL_BLOCKERS.get(tuple(wall))
+        if not blocker:
+            return False
+        return game_state.contains_stationary_unit(blocker)
 
     # ------------------------------------------------------------------ #
     #  SIGNAL-BASED SUPPORT ESCALATION
@@ -192,10 +226,12 @@ class AlgoStrategy(gamelib.AlgoCore):
         avg2 = sum(last2) / len(last2) if last2 else None
         avg3 = sum(last3) / len(last3) if last3 else None
 
+        # Damage-dealt threshold: if our scouts are scoring ≤ 2.5 breaches/turn
+        # on average, our offense is being neutralized → add supports for shield
         target = 2
-        if enemy_turrets >= 8 or (avg2 is not None and avg2 < 5):
+        if enemy_turrets >= 8 or (avg2 is not None and avg2 <= 2.5):
             target = 3
-        if enemy_turrets >= 12 or (avg3 is not None and avg3 < 5):
+        if enemy_turrets >= 12 or (avg3 is not None and avg3 <= 2.5):
             target = 4
 
         # Turn floor (accelerator only, never downgrades)
@@ -221,12 +257,16 @@ class AlgoStrategy(gamelib.AlgoCore):
     # ------------------------------------------------------------------ #
 
     def build_upgrades(self, game_state):
-        left_blocked = self._is_corner_blocked(game_state, self.LEFT_CORNER_REGION)
-        right_blocked = self._is_corner_blocked(game_state, self.RIGHT_CORNER_REGION)
-        if not left_blocked:
-            game_state.attempt_upgrade([[0, 13], [1, 13]])
-        if not right_blocked:
-            game_state.attempt_upgrade([[26, 13], [27, 13]])
+        # Corner walls upgrade only if (a) enemy breached that side AND
+        # (b) that specific wall isn't blocked from above.
+        left_breached = any(loc[0] <= 2 for loc in self.scored_on_locations)
+        right_breached = any(loc[0] >= 25 for loc in self.scored_on_locations)
+        for wall in self.LEFT_CORNER_WALLS if left_breached else []:
+            if not self._wall_blocked(game_state, wall):
+                game_state.attempt_upgrade([wall])
+        for wall in self.RIGHT_CORNER_WALLS if right_breached else []:
+            if not self._wall_blocked(game_state, wall):
+                game_state.attempt_upgrade([wall])
 
     # ------------------------------------------------------------------ #
     #  REACTIVE DEFENSE
@@ -256,6 +296,8 @@ class AlgoStrategy(gamelib.AlgoCore):
     DEMOLISHER_COUNT = 4
     DEMOLISHER_MP_THRESHOLD = 12
     ENEMY_MP_SAVE_SIGNAL = 15             # MP alone isn't enough — combined w/ spawn signal
+    MAX_SCOUT_STACK = 1000                # attempt_spawn clamps to MP, so this
+                                          # effectively means "all available MP"
 
     def execute_attack(self, game_state):
         # === Demolisher scenario check ===
@@ -270,14 +312,16 @@ class AlgoStrategy(gamelib.AlgoCore):
         # Trigger requires TWO signals: high MP AND no spawns last turn
         if self._is_enemy_saving(game_state):
             self.deploy_defensive_interceptor(game_state)
-            # Still do scout offense (enemy didn't hurt us by saving)
+            # Interceptor costs 3 MP; dump remaining MP into scouts
             best_location = self.best_spawn_location(game_state)
-            game_state.attempt_spawn(SCOUT, best_location, 5)
+            game_state.attempt_spawn(SCOUT, best_location, self.MAX_SCOUT_STACK)
             return
 
-        # === Default: 5-scout attack at best location ===
+        # === Default: spawn max scouts at best location ===
+        # MP decays 25%/turn, so holding MP is a loss unless we're saving for
+        # demolishers (handled above). Dump all MP into scouts every turn.
         best_location = self.best_spawn_location(game_state)
-        game_state.attempt_spawn(SCOUT, best_location, 5)
+        game_state.attempt_spawn(SCOUT, best_location, self.MAX_SCOUT_STACK)
 
     def _is_enemy_saving(self, game_state):
         """Enemy is saving MP iff high MP AND didn't spawn mobile units last turn."""
